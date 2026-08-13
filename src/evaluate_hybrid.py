@@ -29,8 +29,8 @@ K = 10
 MAX_USERS = 10_000
 N_SIMILAR_ITEMS = 40
 
-CF_WEIGHT = 0.8
-POPULARITY_WEIGHT = 0.2
+CF_WEIGHT = 0.4
+POPULARITY_WEIGHT = 0.6
 
 
 # ============================================================
