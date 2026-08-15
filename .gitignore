@@ -42,5 +42,8 @@ logs/
 .vscode/
 .idea/
 
+models/*
+!models/.gitkeep
+
 # OS
 Thumbs.db
