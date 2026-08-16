@@ -1,8 +1,12 @@
 from pathlib import Path
+import mlflow
+from mlflow import MlflowClient
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import joblib
+
+import time
 
 
 # ============================================================
@@ -11,29 +15,61 @@ import joblib
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MODEL_DIR = BASE_DIR / "models"
-
-
 # ============================================================
-# Load Model Artifacts
+# MLflow Champion Model
 # ============================================================
 
-print("Loading recommendation artifacts...")
+MLFLOW_TRACKING_URI = "file:./mlruns"
+MODEL_NAME = "ecommerce-hybrid-recommender"
+MODEL_ALIAS = "champion"
+
+
+mlflow.set_tracking_uri(
+    MLFLOW_TRACKING_URI
+)
+
+client = MlflowClient()
+
+print("Loading champion model...")
+
+champion = client.get_model_version_by_alias(
+    MODEL_NAME,
+    MODEL_ALIAS,
+)
+
+RUN_ID = champion.run_id
+
+print(
+    f"Champion version: {champion.version}"
+)
+
+print(
+    f"Champion run: {RUN_ID}"
+)
+
+# Download artifacts belonging to champion run
+artifact_dir = mlflow.artifacts.download_artifacts(
+    run_id=RUN_ID,
+    artifact_path="model_artifacts",
+)
+
+print(
+    f"Artifacts loaded from: {artifact_dir}"
+)
 
 user_histories = joblib.load(
-    MODEL_DIR / "user_histories.joblib"
+    Path(artifact_dir) / "user_histories.joblib"
 )
 
 similar_items = joblib.load(
-    MODEL_DIR / "similar_items.joblib"
+    Path(artifact_dir) / "similar_items.joblib"
 )
 
 popularity_scores = joblib.load(
-    MODEL_DIR / "popularity_scores.joblib"
+    Path(artifact_dir) / "popularity_scores.joblib"
 )
 
-print("Artifacts loaded successfully.")
-
+print("Champion artifacts loaded successfully.")
 
 # ============================================================
 # FastAPI
@@ -51,9 +87,16 @@ app = FastAPI(
 # ============================================================
 
 class RecommendationRequest(BaseModel):
-
     user_id: int
     n_recommendations: int = 10
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": 829044,
+                "n_recommendations": 10
+            }
+        }
 
 
 # ============================================================
@@ -141,12 +184,10 @@ def recommend(
     )
 
     return [
-        item_id
-        for item_id, score
-        in recommendations[
-            :n_recommendations
-        ]
-    ]
+    int(item_id)
+    for item_id, score
+    in recommendations[:n_recommendations]
+]
 
 
 # ============================================================
@@ -170,20 +211,34 @@ def health():
 def get_recommendations(
     request: RecommendationRequest,
 ):
+    start_time = time.perf_counter()
 
     recommendations = recommend(
         user_id=request.user_id,
         n_recommendations=request.n_recommendations,
     )
 
-    if not recommendations:
+    latency_ms = (
+        time.perf_counter() - start_time
+    ) * 1000
 
+    if not recommendations:
         raise HTTPException(
             status_code=404,
             detail="No recommendations found for this user.",
         )
 
+    print(
+        f"Recommendation request | "
+        f"user={request.user_id} | "
+        f"recommendations={len(recommendations)} | "
+        f"latency={latency_ms:.2f}ms"
+    )
+
     return {
         "user_id": request.user_id,
         "recommendations": recommendations,
+        "model": MODEL_NAME,
+        "model_version": champion.version,
+        "latency_ms": round(latency_ms, 2),
     }
