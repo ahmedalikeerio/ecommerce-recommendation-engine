@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MLFLOW_TRACKING_URI = "file:./mlruns"
+MLFLOW_TRACKING_URI = "file:/app/mlruns"
 
 MODEL_NAME = "ecommerce-hybrid-recommender"
 MODEL_ALIAS = "champion"
@@ -66,14 +66,22 @@ print(
 # Download Champion Artifacts
 # ============================================================
 
-artifact_dir = mlflow.artifacts.download_artifacts(
-    run_id=RUN_ID,
-    artifact_path="model_artifacts",
+artifact_dir = (
+    Path("/app/mlruns")
+    / "320293588776741204"
+    / RUN_ID
+    / "artifacts"
+    / "model_artifacts"
 )
 
 print(
     f"Artifacts loaded from: {artifact_dir}"
 )
+
+if not artifact_dir.exists():
+    raise FileNotFoundError(
+        f"Model artifacts not found: {artifact_dir}"
+    )
 
 
 # ============================================================

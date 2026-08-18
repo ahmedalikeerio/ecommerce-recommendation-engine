@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 .git/
 .gitignore
-mlruns/
 data/raw/
 data/processed/
 notebooks/
