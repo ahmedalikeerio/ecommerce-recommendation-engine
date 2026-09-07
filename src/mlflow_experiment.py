@@ -10,7 +10,7 @@ from collaborative import (
     train_model,
 )
 
-from evaluate_collaborative import (
+from evaluate_collaborative_fast import (
     evaluate_collaborative,
 )
 
