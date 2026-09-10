@@ -3,213 +3,159 @@ from pathlib import Path
 import joblib
 
 
-# ============================================================
-# Configuration
-# ============================================================
+class RecommendationService:
+    """
+    Production inference service for the e-commerce
+    hybrid recommendation model.
+    """
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+    def __init__(
+        self,
+        artifact_dir,
+        cf_weight=0.4,
+        popularity_weight=0.6,
+    ):
+        self.artifact_dir = Path(artifact_dir)
 
-MODEL_DIR = BASE_DIR / "models"
+        self.cf_weight = cf_weight
+        self.popularity_weight = popularity_weight
 
+        self.user_histories = None
+        self.similar_items = None
+        self.popularity_scores = None
 
-# ============================================================
-# Load Model Artifacts
-# ============================================================
+        self.load_artifacts()
 
-def load_artifacts():
+    # ========================================================
+    # Load Artifacts
+    # ========================================================
 
-    print("Loading model artifacts...")
+    def load_artifacts(self):
+        """Load trained recommendation artifacts once."""
 
-    cf_model = joblib.load(
-        MODEL_DIR / "cf_model.joblib"
-    )
+        if not self.artifact_dir.exists():
+            raise FileNotFoundError(
+                f"Model artifacts not found at: "
+                f"{self.artifact_dir}"
+            )
 
-    popularity_scores = joblib.load(
-        MODEL_DIR / "popularity_scores.joblib"
-    )
+        self.user_histories = joblib.load(
+            self.artifact_dir / "user_histories.joblib"
+        )
 
-    user_histories = joblib.load(
-        MODEL_DIR / "user_histories.joblib"
-    )
+        self.similar_items = joblib.load(
+            self.artifact_dir / "similar_items.joblib"
+        )
 
-    similar_items = joblib.load(
-        MODEL_DIR / "similar_items.joblib"
-    )
+        self.popularity_scores = joblib.load(
+            self.artifact_dir / "popularity_scores.joblib"
+        )
 
-    mappings = joblib.load(
-        MODEL_DIR / "mappings.joblib"
-    )
+    # ========================================================
+    # Recommendation
+    # ========================================================
 
-    config = joblib.load(
-        MODEL_DIR / "config.joblib"
-    )
-
-    print("All artifacts loaded successfully.")
-
-    return {
-        "cf_model": cf_model,
-        "popularity_scores": popularity_scores,
-        "user_histories": user_histories,
-        "similar_items": similar_items,
-        "user_to_index": mappings["user_to_index"],
-        "item_to_index": mappings["item_to_index"],
-        "config": config,
-    }
-
-
-# ============================================================
-# Recommendation
-# ============================================================
-
-def recommend(
-    user_id,
-    artifacts,
-    n_recommendations=10,
-):
-
-    user_histories = artifacts[
-        "user_histories"
-    ]
-
-    similar_items = artifacts[
-        "similar_items"
-    ]
-
-    popularity_scores = artifacts[
-        "popularity_scores"
-    ]
-
-    config = artifacts["config"]
-
-    history = user_histories.get(
+    def recommend(
+        self,
         user_id,
-        []
-    )
+        n_recommendations=10,
+    ):
+        """
+        Generate hybrid recommendations for a user.
+        """
 
-    if not history:
-        return []
+        history = self.user_histories.get(
+            user_id,
+            []
+        )
 
-    interacted_items = set(history)
+        if not history:
+            return []
 
-    candidate_scores = {}
+        interacted_items = set(history)
 
-    # --------------------------------------------------------
-    # Collaborative filtering
-    # --------------------------------------------------------
+        candidate_scores = {}
 
-    for item_id in history:
+        # ----------------------------------------------------
+        # Collaborative Filtering
+        # ----------------------------------------------------
 
-        if item_id not in similar_items:
-            continue
+        for item_id in history:
 
-        for similar_item, similarity in (
-            similar_items[item_id]
+            neighbors = self.similar_items.get(
+                item_id,
+                []
+            )
+
+            for similar_item, similarity in neighbors:
+
+                if similar_item in interacted_items:
+                    continue
+
+                candidate_scores[similar_item] = (
+                    candidate_scores.get(
+                        similar_item,
+                        0.0
+                    )
+                    + similarity
+                )
+
+        if not candidate_scores:
+            return []
+
+        # ----------------------------------------------------
+        # Normalize CF scores
+        # ----------------------------------------------------
+
+        max_cf_score = max(
+            candidate_scores.values()
+        )
+
+        if max_cf_score > 0:
+
+            candidate_scores = {
+                item: score / max_cf_score
+                for item, score
+                in candidate_scores.items()
+            }
+
+        # ----------------------------------------------------
+        # Hybrid scoring
+        # ----------------------------------------------------
+
+        hybrid_scores = {}
+
+        for item_id, cf_score in (
+            candidate_scores.items()
         ):
 
-            if similar_item in interacted_items:
-                continue
-
-            candidate_scores[similar_item] = (
-                candidate_scores.get(
-                    similar_item,
+            popularity_score = (
+                self.popularity_scores.get(
+                    item_id,
                     0.0
                 )
-                + similarity
             )
 
-    if not candidate_scores:
-        return []
-
-    # --------------------------------------------------------
-    # Normalize CF scores
-    # --------------------------------------------------------
-
-    max_cf = max(
-        candidate_scores.values()
-    )
-
-    if max_cf > 0:
-
-        candidate_scores = {
-            item: score / max_cf
-            for item, score
-            in candidate_scores.items()
-        }
-
-    # --------------------------------------------------------
-    # Hybrid scoring
-    # --------------------------------------------------------
-
-    hybrid_scores = {}
-
-    for item_id, cf_score in (
-        candidate_scores.items()
-    ):
-
-        popularity_score = (
-            popularity_scores.get(
-                item_id,
-                0.0
+            hybrid_scores[item_id] = (
+                self.cf_weight * cf_score
+                +
+                self.popularity_weight
+                * popularity_score
             )
+
+        # ----------------------------------------------------
+        # Rank
+        # ----------------------------------------------------
+
+        recommendations = sorted(
+            hybrid_scores.items(),
+            key=lambda x: x[1],
+            reverse=True,
         )
 
-        hybrid_score = (
-            config["cf_weight"] * cf_score
-            +
-            config["popularity_weight"]
-            * popularity_score
-        )
-
-        hybrid_scores[item_id] = (
-            hybrid_score
-        )
-
-    # --------------------------------------------------------
-    # Rank
-    # --------------------------------------------------------
-
-    recommendations = sorted(
-        hybrid_scores.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    return [
-        item_id
-        for item_id, score
-        in recommendations[
-            :n_recommendations
+        return [
+            int(item_id)
+            for item_id, _ in recommendations[
+                :n_recommendations
+            ]
         ]
-    ]
-
-
-# ============================================================
-# Test Inference
-# ============================================================
-
-if __name__ == "__main__":
-
-    print("=" * 60)
-    print("RECOMMENDATION INFERENCE")
-    print("=" * 60)
-
-    artifacts = load_artifacts()
-
-    # Test user
-    example_user = 829044
-
-    recommendations = recommend(
-        example_user,
-        artifacts,
-        n_recommendations=10,
-    )
-
-    print(
-        f"\nUser: {example_user}"
-    )
-
-    print(
-        "\nRecommendations:"
-    )
-
-    print(recommendations)
