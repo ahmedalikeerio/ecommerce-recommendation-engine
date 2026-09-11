@@ -6,10 +6,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 TRAIN_DATA= BASE_DIR/'data'/'processed'/'train.csv'
 TEST_DATA= BASE_DIR/'data'/'processed'/'test.csv'
 
-# load the train and test data
-
-train=pd.read_csv(TRAIN_DATA)
-test=pd.read_csv(TEST_DATA)
 
 #######################
 # BASELINE - 1
@@ -97,8 +93,12 @@ def most_added_to_cart_baseline(train, k=10):
     return most_add_to_cart
 
 if __name__ == '__main__':
+
+    train = pd.read_csv(TRAIN_DATA)
+    test = pd.read_csv(TEST_DATA)
+
     print("Most Viewed :\n")
-    print(most_engaged_baseline(train))
+    print(most_viewed_baseline(train))
 
 
     print("\n Most Engaged: \n")
