@@ -8,6 +8,7 @@ from mlflow import MlflowClient
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.inference import RecommendationService
 
@@ -152,6 +153,13 @@ app = FastAPI(
     ),
     version="1.0.0",
 )
+
+
+# ============================================================
+# Prometheus Metrics
+# ============================================================
+
+Instrumentator().instrument(app).expose(app)
 
 
 # ============================================================

@@ -3,16 +3,12 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     container_name: ecommerce-mlflow
-
     ports:
       - "5001:5000"
-
     volumes:
       - ./mlruns:/mlruns
-
     environment:
       MLFLOW_ALLOW_FILE_STORE: "true"
-
     command: >
       mlflow server
       --host 0.0.0.0
@@ -20,7 +16,6 @@ services:
       --allowed-hosts mlflow:5000,localhost:5001,127.0.0.1:5001
       --backend-store-uri /mlruns
       --default-artifact-root /mlruns
-
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 5s
@@ -32,18 +27,38 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-
     container_name: ecommerce-recommendation-api
-
     ports:
       - "8000:8000"
-
     volumes:
       - ./mlruns:/app/mlruns
-
     depends_on:
       mlflow:
         condition: service_healthy
-
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ecommerce-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ecommerce-grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+
+volumes:
+  grafana_data:
