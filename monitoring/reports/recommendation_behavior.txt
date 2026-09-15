@@ -1,0 +1,11 @@
+Recommendation Behavior Monitoring
+=============================================
+
+Total users evaluated: 888620
+Users with recommendations: 888620
+Recommendation coverage: 81.99%
+Average recommendations per user: 10.00
+Cold-start users: 0
+Unique recommended items: 40993
+Catalog size: 50000
+Average recommended item popularity: 0.3411
