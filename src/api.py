@@ -29,7 +29,7 @@ MLFLOW_TRACKING_URI = os.getenv(
 
 ARTIFACT_ROOT = os.getenv(
     "MODEL_ARTIFACT_ROOT",
-    "/app/mlruns",
+    str(Path(__file__).resolve().parent.parent / "mlruns")
 )
 
 CF_WEIGHT = 0.4
@@ -197,6 +197,16 @@ def health():
         "model_version": MODEL_VERSION,
     }
 
+@app.get("/model-info")
+def model_info():
+    return {
+        "model_name": MODEL_NAME,
+        "model_alias": MODEL_ALIAS,
+        "model_version": MODEL_VERSION,
+        "run_id": RUN_ID,
+        "cf_weight": CF_WEIGHT,
+        "popularity_weight": POPULARITY_WEIGHT,
+    }
 
 # ============================================================
 # Recommendation Endpoint
